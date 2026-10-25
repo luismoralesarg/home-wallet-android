@@ -935,6 +935,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Error"];
+            503: components["responses"]["Error"];
         };
     };
     listCategories: {
