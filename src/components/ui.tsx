@@ -60,7 +60,7 @@ export function PrimaryButton({
   onPress: () => void;
   loading?: boolean;
   disabled?: boolean;
-  variant?: 'dark' | 'danger';
+  variant?: 'dark' | 'danger' | 'light';
   style?: StyleProp<ViewStyle>;
 }) {
   const off = disabled || loading;
@@ -68,12 +68,12 @@ export function PrimaryButton({
     <TouchableOpacity
       onPress={onPress}
       disabled={off}
-      style={[styles.button, variant === 'danger' && styles.buttonDanger, off && { opacity: 0.5 }, style]}
+      style={[styles.button, variant === 'danger' && styles.buttonDanger, variant === 'light' && styles.buttonLight, off && { opacity: 0.5 }, style]}
     >
       {loading ? (
-        <ActivityIndicator color={variant === 'danger' ? colors.danger : colors.accent} />
+        <ActivityIndicator color={variant === 'danger' ? colors.danger : variant === 'light' ? colors.text : colors.accent} />
       ) : (
-        <Text style={[styles.buttonText, variant === 'danger' && { color: colors.danger }]}>{label}</Text>
+        <Text style={[styles.buttonText, variant === 'danger' && { color: colors.danger }, variant === 'light' && { color: colors.text }]}>{label}</Text>
       )}
     </TouchableOpacity>
   );
@@ -112,6 +112,7 @@ const styles = StyleSheet.create({
   label: { fontSize: 13, fontWeight: '700', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
   button: { backgroundColor: colors.black, borderRadius: radius.pill, paddingVertical: 16, alignItems: 'center' },
   buttonDanger: { backgroundColor: colors.dangerSoft },
+  buttonLight: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
   buttonText: { color: colors.accent, fontSize: 16, fontWeight: '800' },
   errorBox: { backgroundColor: colors.dangerSoft, borderRadius: radius.md, padding: spacing.md, gap: spacing.sm },
   errorText: { color: colors.danger, fontSize: 14 },

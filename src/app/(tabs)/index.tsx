@@ -10,6 +10,7 @@ export default function InicioScreen() {
     <View style={{ flex: 1 }}>
       <EmptyScreen title="Inicio" />
       <View style={styles.cta}>
+        <PrimaryButton label="Tarjetas" variant="light" onPress={() => router.push('/tarjetas')} />
         <PrimaryButton label="Cargar gasto" onPress={() => router.push('/cargar')} />
       </View>
     </View>
@@ -17,5 +18,5 @@ export default function InicioScreen() {
 }
 
 const styles = StyleSheet.create({
-  cta: { position: 'absolute', left: spacing.lg, right: spacing.lg, bottom: TAB_BAR_HEIGHT + 32 },
+  cta: { position: 'absolute', left: spacing.lg, right: spacing.lg, bottom: TAB_BAR_HEIGHT + 32, gap: spacing.sm },
 });

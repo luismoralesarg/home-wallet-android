@@ -5,8 +5,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/auth/AuthProvider';
 import { Chip, ErrorBox } from '@/components/ui';
-import { useCategories, useTransactions } from '@/features/movements/hooks';
-import { TransactionRow } from '@/features/movements/TransactionRow';
+import { useCards } from '@/features/cards/hooks';
+import { useCategories } from '@/features/movements/hooks';
+import { MovementRow } from '@/features/movements/MovementRow';
+import { useMovements } from '@/features/movements/useMovements';
 import { monthLabel, monthOf, shiftMonth } from '@/lib/dates';
 import { colors, radius, spacing, TAB_BAR_HEIGHT } from '@/theme';
 
@@ -20,9 +22,10 @@ export default function MovimientosScreen() {
   const [userId, setUserId] = useState<string | undefined>();
 
   const categories = useCategories();
-  const txs = useTransactions({ month, categoryId, userId });
-  const items = useMemo(() => txs.data?.pages.flatMap((p) => p.items) ?? [], [txs.data]);
-  const total = txs.data?.pages[0]?.total ?? 0;
+  const cards = useCards();
+  const txs = useMovements({ month, categoryId, userId });
+  const items = txs.items;
+  const total = txs.total;
 
   // No hay endpoint de usuarios: se van juntando los que aparecen en los movimientos.
   const [knownUsers, setKnownUsers] = useState<Record<string, string>>({});
@@ -34,8 +37,8 @@ export default function MovimientosScreen() {
       const next = { ...k };
       let changed = false;
       for (const t of items) {
-        if (next[t.created_by.id] !== t.created_by.name) {
-          next[t.created_by.id] = t.created_by.name;
+        if (next[t.createdBy.id] !== t.createdBy.name) {
+          next[t.createdBy.id] = t.createdBy.name;
           changed = true;
         }
       }
@@ -44,6 +47,7 @@ export default function MovimientosScreen() {
   }, [items]);
 
   const categoryName = useMemo(() => new Map((categories.data ?? []).map((c) => [c.id, c.name])), [categories.data]);
+  const cardName = useMemo(() => new Map((cards.data ?? []).map((c) => [c.id, c.name])), [cards.data]);
 
   return (
     <View style={styles.root}>
@@ -89,18 +93,30 @@ export default function MovimientosScreen() {
       ) : (
         <FlatList
           data={items}
-          keyExtractor={(t) => t.id}
+          keyExtractor={(t) => t.key}
           contentContainerStyle={[styles.list, { paddingBottom: TAB_BAR_HEIGHT + 48 }]}
           ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
           renderItem={({ item }) => (
-            <TransactionRow tx={item} categoryName={categoryName.get(item.category_id)} onPress={() => router.push({ pathname: '/cargar', params: { id: item.id } })} />
+            <MovementRow
+              item={item}
+              categoryName={categoryName.get(item.categoryId)}
+              cardName={item.card ? cardName.get(item.card.id) : undefined}
+              onPress={() => router.push({ pathname: '/cargar', params: item.card ? { id: item.id, cardId: item.card.id } : { id: item.id } })}
+            />
           )}
-          ListHeaderComponent={items.length ? <Text style={styles.count}>{total} {total === 1 ? 'movimiento' : 'movimientos'}</Text> : undefined}
+          ListHeaderComponent={
+            <View style={{ gap: spacing.sm, marginBottom: spacing.sm }}>
+              {txs.cardsError && (
+                <ErrorBox message="No se pudieron cargar las compras con tarjeta." onRetry={() => void txs.refetch()} />
+              )}
+              {items.length > 0 && <Text style={styles.count}>{total} {total === 1 ? 'movimiento' : 'movimientos'}</Text>}
+            </View>
+          }
           ListEmptyComponent={<Text style={styles.empty}>No hay movimientos en {monthLabel(month)}.</Text>}
           ListFooterComponent={txs.isFetchingNextPage ? <ActivityIndicator style={{ margin: spacing.md }} color={colors.black} /> : undefined}
           onEndReached={() => txs.hasNextPage && !txs.isFetchingNextPage && txs.fetchNextPage()}
           onEndReachedThreshold={0.4}
-          refreshControl={<RefreshControl refreshing={txs.isRefetching && !txs.isFetchingNextPage} onRefresh={() => void txs.refetch()} />}
+          refreshControl={<RefreshControl refreshing={txs.isRefetching} onRefresh={() => void txs.refetch()} />}
         />
       )}
     </View>
@@ -121,6 +137,6 @@ const styles = StyleSheet.create({
   chips: { paddingHorizontal: spacing.lg, gap: spacing.sm },
   pad: { padding: spacing.lg },
   list: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm },
-  count: { color: colors.textMuted, fontSize: 12, marginBottom: spacing.sm },
+  count: { color: colors.textMuted, fontSize: 12 },
   empty: { textAlign: 'center', color: colors.textMuted, marginTop: spacing.xl },
 });

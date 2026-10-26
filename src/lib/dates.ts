@@ -42,3 +42,9 @@ export function formatDate(isoDate: string): string {
   const [y, m, d] = isoDate.split('-');
   return `${d}/${m}/${y}`;
 }
+
+/** "20/10" desde una fecha ISO (YYYY-MM-DD). */
+export function formatShortDate(isoDate: string): string {
+  const [, m, d] = isoDate.split('-');
+  return `${d}/${m}`;
+}

@@ -7,11 +7,11 @@ import { Chip, ErrorBox, Field, PrimaryButton, Segmented } from '@/components/ui
 import { MoneyText } from '@/components/MoneyText';
 import { previewStatementDueDate } from '@/lib/cards';
 import { formatDate, formatDateTime } from '@/lib/dates';
-import { dec, type Currency } from '@/lib/money';
+import { dec, sanitizeAmount, type Currency } from '@/lib/money';
 import { pickDateTime } from '@/lib/pickDateTime';
 import { colors, radius, spacing } from '@/theme';
+import { useCardPurchase, useCards, useDeleteCardPurchase, useUpdateCardPurchase } from '@/features/cards/hooks';
 import {
-  useCards,
   useCategories,
   useCreateCardPurchase,
   useCreateTransaction,
@@ -23,24 +23,23 @@ import {
 
 type Kind = 'income' | 'expense';
 
-/** Monto con hasta 2 decimales; acepta coma como separador. */
-function sanitizeAmount(text: string): string {
-  const t = text.replace(',', '.').replace(/[^0-9.]/g, '');
-  const [int, ...rest] = t.split('.');
-  return rest.length ? `${int}.${rest.join('').slice(0, 2)}` : int;
-}
-
 const isValidAmount = (s: string) => /^\d+(\.\d{1,2})?$/.test(s) && dec(s).gt(0);
 
-/** Alta de movimiento (efectivo/cuenta o tarjeta) y edición/borrado de uno existente. */
-export function MovementForm({ id }: { id?: string }) {
+/**
+ * Alta de movimiento (efectivo/cuenta o tarjeta) y edición/borrado de uno existente.
+ * Con `id` edita una transacción; con `id` + `cardId`, una compra con tarjeta.
+ */
+export function MovementForm({ id, cardId }: { id?: string; cardId?: string }) {
   const editing = !!id;
+  const editingPurchase = editing && !!cardId;
   const insets = useSafeAreaInsets();
 
   const categories = useCategories();
   const cards = useCards();
   const rate = useExchangeRate();
-  const existing = useTransaction(id);
+  const existingTx = useTransaction(editingPurchase ? undefined : id);
+  const existingPurchase = useCardPurchase(cardId, editingPurchase ? id : undefined);
+  const existing = editingPurchase ? existingPurchase : existingTx;
 
   const [kind, setKind] = useState<Kind>('expense');
   const [amount, setAmount] = useState('');
@@ -54,6 +53,8 @@ export function MovementForm({ id }: { id?: string }) {
 
   const createTx = useCreateTransaction();
   const createPurchase = useCreateCardPurchase();
+  const updatePurchase = useUpdateCardPurchase();
+  const deletePurchase = useDeleteCardPurchase();
   const updateTx = useUpdateTransaction(id ?? '');
   const deleteTx = useDeleteTransaction();
 
@@ -63,12 +64,13 @@ export function MovementForm({ id }: { id?: string }) {
     const t = existing.data;
     if (!editing || !t || hydrated.current) return;
     hydrated.current = true;
-    setKind(t.kind);
+    setKind('kind' in t ? t.kind : 'expense');
     setAmount(t.amount);
     setCurrency(t.currency);
     setCategoryId(t.category_id);
     setDescription(t.description);
-    setDate(new Date(t.occurred_at));
+    setDate(new Date('purchased_at' in t ? t.purchased_at : t.occurred_at));
+    if ('installments' in t) setInstallments(String(t.installments));
   }, [editing, existing.data]);
 
   const kindCategories = useMemo(() => (categories.data ?? []).filter((c) => c.kind === kind), [categories.data, kind]);
@@ -79,14 +81,16 @@ export function MovementForm({ id }: { id?: string }) {
     }
   }, [kindCategories, categoryId, editing]);
 
-  const card = payment === 'cash' ? undefined : cards.data?.find((c) => c.id === payment);
-  const usingCard = !!card && kind === 'expense' && !editing;
+  const purchaseCardId = editingPurchase ? cardId : payment === 'cash' ? undefined : payment;
+  const card = purchaseCardId ? cards.data?.find((c) => c.id === purchaseCardId) : undefined;
+  const usingCard = !!card && kind === 'expense' && (!editing || editingPurchase);
   const installmentsNum = Number(installments);
   const installmentsValid = Number.isInteger(installmentsNum) && installmentsNum >= 1 && installmentsNum <= 60;
 
   const amountValid = isValidAmount(amount);
   const canSave = amountValid && !!categoryId && (!usingCard || installmentsValid);
-  const busy = createTx.isPending || createPurchase.isPending || updateTx.isPending || deleteTx.isPending;
+  const busy =
+    createTx.isPending || createPurchase.isPending || updateTx.isPending || deleteTx.isPending || updatePurchase.isPending || deletePurchase.isPending;
 
   const usdPreview =
     currency === 'USD' && amountValid && rate.data
@@ -108,7 +112,14 @@ export function MovementForm({ id }: { id?: string }) {
     if (!canSave || !categoryId) return;
     const base = { amount: dec(amount).toFixed(2), currency, category_id: categoryId, description: description.trim() };
     try {
-      if (editing) {
+      if (editingPurchase && id && cardId) {
+        await updatePurchase.mutateAsync({
+          cardId,
+          id,
+          body: { ...base, installments: installmentsNum, purchased_at: date.toISOString() },
+        });
+        done();
+      } else if (editing) {
         await updateTx.mutateAsync({ ...base, occurred_at: date.toISOString() });
         done();
       } else if (usingCard && card) {
@@ -133,11 +144,14 @@ export function MovementForm({ id }: { id?: string }) {
       {
         text: 'Borrar',
         style: 'destructive',
-        onPress: () =>
-          deleteTx.mutate(id, {
+        onPress: () => {
+          const opts = {
             onSuccess: () => done(),
-            onError: (e) => setError(e instanceof Error ? e.message : 'No se pudo borrar'),
-          }),
+            onError: (e: unknown) => setError(e instanceof Error ? e.message : 'No se pudo borrar'),
+          };
+          if (editingPurchase && cardId) deletePurchase.mutate({ cardId, id }, opts);
+          else deleteTx.mutate(id, opts);
+        },
       },
     ]);
   };
@@ -154,7 +168,7 @@ export function MovementForm({ id }: { id?: string }) {
       </View>
 
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing.xl }]} keyboardShouldPersistTaps="handled">
-        {editing && existing.isError && <ErrorBox message="No se pudo cargar el movimiento" onRetry={() => existing.refetch()} />}
+        {editing && existing.isError && <ErrorBox message="No se pudo cargar el movimiento" onRetry={() => void existing.refetch()} />}
 
         <Segmented
           disabled={editing}
@@ -251,7 +265,13 @@ export function MovementForm({ id }: { id?: string }) {
           </View>
         )}
 
-        {editing && <Text style={styles.hint}>El tipo de movimiento no se puede cambiar. Los gastos con tarjeta se editan desde la tarjeta.</Text>}
+        {editing && (
+          <Text style={styles.hint}>
+            {editingPurchase
+              ? 'Cambiar monto, cuotas o fecha recalcula los resúmenes de la tarjeta.'
+              : 'El tipo de movimiento no se puede cambiar.'}
+          </Text>
+        )}
 
         {error && <ErrorBox message={error} />}
 

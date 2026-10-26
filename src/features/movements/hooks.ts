@@ -8,7 +8,6 @@ export type Category = components['schemas']['Category'];
 export type Transaction = components['schemas']['Transaction'];
 export type TransactionInput = components['schemas']['TransactionInput'];
 export type TransactionPatch = components['schemas']['TransactionPatch'];
-export type CardOverview = components['schemas']['CardOverview'];
 export type CardPurchaseInput = components['schemas']['CardPurchaseInput'];
 
 const PAGE_SIZE = 30;
@@ -26,15 +25,6 @@ export function useExchangeRate() {
     queryKey: ['exchange-rate'],
     queryFn: async () => unwrap(await api.GET('/exchange-rate/today')),
     staleTime: 60 * 60_000,
-  });
-}
-
-/** Tarjetas para el selector de medio de pago. Si la API falla, el formulario sigue con "Efectivo/cuenta". */
-export function useCards() {
-  return useQuery({
-    queryKey: ['cards'],
-    queryFn: async () => unwrap(await api.GET('/cards')),
-    retry: false,
   });
 }
 
@@ -67,7 +57,9 @@ function useInvalidateMoney() {
   const qc = useQueryClient();
   return () =>
     Promise.all(
-      ['transactions', 'transaction', 'dashboard', 'cards'].map((k) => qc.invalidateQueries({ queryKey: [k] })),
+      ['transactions', 'transaction', 'card-purchases', 'statement', 'dashboard', 'cards'].map((k) =>
+        qc.invalidateQueries({ queryKey: [k] }),
+      ),
     );
 }
 
