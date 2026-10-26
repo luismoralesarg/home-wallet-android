@@ -9,6 +9,7 @@ export const colors = {
   text: '#0B0B0B',
   textMuted: '#8A8A85',
   border: '#E4E4DE',
+  success: '#1F9D55',
   danger: '#E5484D',
   dangerSoft: '#FDECEC',
 } as const;

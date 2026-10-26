@@ -164,12 +164,36 @@ export interface paths {
         get: operations["getCard"];
         put?: never;
         post?: never;
-        /** Borrar tarjeta */
+        /**
+         * Borrar tarjeta
+         * @description Devuelve 409 si la tarjeta tiene compras; hay que borrarlas primero.
+         */
         delete: operations["deleteCard"];
         options?: never;
         head?: never;
-        /** Editar tarjeta */
+        /**
+         * Editar tarjeta
+         * @description Cambiar `closing_day` o `due_day` aplica a las compras nuevas; los resúmenes y
+         *     cuotas ya generados conservan sus fechas.
+         */
         patch: operations["updateCard"];
+        trace?: never;
+    };
+    "/card-purchases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listar compras con tarjeta (de todas las tarjetas) */
+        get: operations["listCardPurchases"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/cards/{id}/purchases": {
@@ -201,7 +225,8 @@ export interface paths {
             };
             cookie?: never;
         };
-        get?: never;
+        /** Obtener una compra con tarjeta */
+        get: operations["getCardPurchase"];
         put?: never;
         post?: never;
         /** Borrar compra (y sus cuotas) */
@@ -638,9 +663,13 @@ export interface components {
             paid_at?: string | null;
         };
         CardOverview: components["schemas"]["Card"] & {
+            /** @description Resumen que hoy todavía acumula compras (las de hoy caen acá). */
             open_statement: components["schemas"]["StatementSummary"];
+            /** @description Resúmenes ya cerrados, con saldo y sin pagar, del más viejo al más nuevo. */
+            closed_unpaid_statements: components["schemas"]["StatementSummary"][];
+            /** @description Los 3 resúmenes siguientes al abierto. */
             upcoming_statements: components["schemas"]["StatementSummary"][];
-            /** @description Total comprometido en cuotas futuras (resúmenes aún no cerrados). */
+            /** @description Total de cuotas en resúmenes que todavía no cerraron (el abierto y los siguientes). */
             future_installments_ars: components["schemas"]["Money"];
         };
         CardPurchase: components["schemas"]["MoneyFields"] & {
@@ -659,6 +688,12 @@ export interface components {
             created_by: components["schemas"]["UserRef"];
             /** Format: date-time */
             created_at: string;
+        };
+        CardPurchasePage: {
+            items: components["schemas"]["CardPurchase"][];
+            total: number;
+            limit: number;
+            offset: number;
         };
         CardPurchaseInput: {
             amount: components["schemas"]["Money"];
@@ -693,11 +728,11 @@ export interface components {
             installment_number: number;
             installments: number;
             amount_ars: components["schemas"]["Money"];
-            original_amount?: components["schemas"]["Money"];
-            original_currency?: components["schemas"]["Currency"];
+            original_amount: components["schemas"]["Money"];
+            original_currency: components["schemas"]["Currency"];
             /** Format: uuid */
             category_id: string;
-            created_by?: components["schemas"]["UserRef"];
+            created_by: components["schemas"]["UserRef"];
         };
         StatementDetail: components["schemas"]["StatementSummary"] & {
             /** Format: uuid */
@@ -935,6 +970,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Error"];
+            503: components["responses"]["Error"];
         };
     };
     listCategories: {
@@ -1302,6 +1338,36 @@ export interface operations {
             404: components["responses"]["Error"];
         };
     };
+    listCardPurchases: {
+        parameters: {
+            query?: {
+                /** @description Filtra por mes (hora Mendoza). */
+                month?: components["parameters"]["MonthQuery"];
+                card_id?: string;
+                category_id?: string;
+                user_id?: string;
+                limit?: components["parameters"]["Limit"];
+                offset?: components["parameters"]["Offset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de compras, más recientes primero */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardPurchasePage"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+        };
+    };
     createCardPurchase: {
         parameters: {
             query?: never;
@@ -1327,6 +1393,30 @@ export interface operations {
                 };
             };
             400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    getCardPurchase: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["Id"];
+                purchaseId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Compra */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardPurchase"];
+                };
+            };
             404: components["responses"]["Error"];
         };
     };
