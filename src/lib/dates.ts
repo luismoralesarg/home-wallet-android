@@ -48,3 +48,9 @@ export function formatShortDate(isoDate: string): string {
   const [, m, d] = isoDate.split('-');
   return `${d}/${m}`;
 }
+
+/** Hoy como YYYY-MM-DD en hora Mendoza (para comparar con fechas de la API). */
+export function todayIso(now: Date = new Date()): string {
+  const p = mendozaParts(now);
+  return `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')}`;
+}

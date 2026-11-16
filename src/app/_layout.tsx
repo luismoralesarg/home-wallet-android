@@ -18,6 +18,7 @@ function RootStack() {
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="cargar" options={{ presentation: 'modal' }} />
         <Stack.Screen name="tarjetas" />
+        <Stack.Screen name="proximos-pagos" />
       </Stack.Protected>
       <Stack.Protected guard={!user}>
         <Stack.Screen name="login" />

@@ -369,7 +369,9 @@ export interface paths {
         put?: never;
         /**
          * Aumento a todas las cuotas no pagadas desde un mes
-         * @description Se envía `percent` o `amount`, no ambos.
+         * @description Se envía `percent` o `amount` (monto fijo, puede ser negativo), no ambos. Afecta solo a las cuotas
+         *     sin pagar desde `from_month` (inclusive). Devuelve 400 si no hay ninguna cuota para ajustar o si
+         *     alguna quedaría en cero o negativa; en ese caso no se modifica nada.
          */
         post: operations["adjustLoan"];
         delete?: never;
@@ -496,7 +498,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Próximos pagos ordenados por fecha */
+        /**
+         * Próximos pagos ordenados por fecha
+         * @description Resúmenes de tarjeta sin pagar (los vencidos primero), la próxima cuota sin pagar de cada préstamo o
+         *     vehículo y el próximo cobro de cada suscripción activa, hasta 60 días hacia adelante. Las cuotas de
+         *     préstamos no tienen día de vencimiento: `date` es el último día del mes de la cuota.
+         */
         get: operations["getUpcomingPayments"];
         put?: never;
         post?: never;
@@ -759,7 +766,12 @@ export interface components {
             end_month: components["schemas"]["Month"];
             /** @description Cuota del mes actual (null si no hay). */
             current_installment: components["schemas"]["LoanInstallment"] | null;
+            /** @description Cuotas sin pagar del mes actual en adelante. */
             remaining_installments: number;
+            /**
+             * @description Suma en ARS de esas cuotas. En préstamos en USD, las cuotas sin pagar se valúan a la
+             *     cotización de hoy; las pagadas conservan la del día en que se marcaron.
+             */
             remaining_total_ars: components["schemas"]["Money"];
             created_by: components["schemas"]["UserRef"];
             /** Format: date-time */
@@ -818,9 +830,23 @@ export interface components {
             currency?: components["schemas"]["Currency"];
             charge_day?: number;
         };
-        /** @description Todo en ARS. */
+        /**
+         * @description Todo en ARS.
+         *
+         *     ```
+         *     presupuesto_variable = ingresos_del_mes − compromisos_del_mes
+         *     limite_hoy = (presupuesto_variable − gastos_variables_hasta_ayer) / dias_restantes_incluyendo_hoy
+         *     restante_hoy = limite_hoy − gastado_hoy
+         *     ```
+         *
+         *     Los gastos variables son solo las transacciones de gasto en efectivo/cuenta: una compra con tarjeta
+         *     **no** los altera, entra por el resumen cuando vence. El límite se fija con lo gastado hasta ayer, así
+         *     no se mueve mientras se cargan gastos del día. Si el mes ya superó el presupuesto (o no tiene
+         *     ingresos), `limite_hoy` es negativo y `over_limit` es true.
+         */
         DailyIndicator: {
             date: components["schemas"]["Date"];
+            /** @description Puede ser negativo si el presupuesto del mes ya se agotó. */
             limite_hoy: components["schemas"]["Money"];
             gastado_hoy: components["schemas"]["Money"];
             /** @description Negativo si se pasó. */
@@ -831,6 +857,7 @@ export interface components {
             breakdown: components["schemas"]["DailyBreakdown"];
         };
         DailyBreakdown: {
+            /** @description Ingresos del mes, incluidos los fechados más adelante dentro del mes. */
             income_month_ars: components["schemas"]["Money"];
             commitments: components["schemas"]["Commitments"];
             /** @description ingresos − compromisos. */
@@ -840,10 +867,13 @@ export interface components {
             remaining_days: number;
         };
         Commitments: {
-            /** @description Resúmenes con vencimiento en el mes. */
+            /** @description Resúmenes de tarjeta con vencimiento en el mes (cuotas + saldo previo), estén pagados o no. */
             cards_ars: components["schemas"]["Money"];
+            /** @description Cuotas del mes de préstamos. */
             loans_ars: components["schemas"]["Money"];
+            /** @description Cuota del mes del vehículo. */
             vehicle_ars: components["schemas"]["Money"];
+            /** @description Suscripciones activas. */
             subscriptions_ars: components["schemas"]["Money"];
             total_ars: components["schemas"]["Money"];
         };
@@ -859,10 +889,15 @@ export interface components {
             /** @description Incluye compras con tarjeta por fecha de compra. */
             spend_by_category: components["schemas"]["CategorySpend"][];
             income_ars: components["schemas"]["Money"];
+            /**
+             * @description Gastos del mes: transacciones de gasto más compras con tarjeta por fecha de compra (monto
+             *     completo), el mismo universo que `spend_by_category`. Los compromisos van aparte.
+             */
             expenses_ars: components["schemas"]["Money"];
-            previous_month_income_ars?: components["schemas"]["Money"];
+            previous_month_income_ars: components["schemas"]["Money"];
             previous_month_expenses_ars: components["schemas"]["Money"];
             commitments: components["schemas"]["Commitments"];
+            /** @description Cuotas de todas las tarjetas en resúmenes que todavía no cerraron. */
             card_future_installments_ars: components["schemas"]["Money"];
         };
         UpcomingPayment: {
